@@ -1,4 +1,4 @@
-# binary_layout
+# Binary File Parser
 
 Provides a parser for a custom file format for easily reading a binary file given data offsets and lengths.
 
