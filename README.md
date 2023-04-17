@@ -36,6 +36,6 @@ In this example we show two sections for `table_1` and `table_2`. Section `table
 
 ```
 with BinaryLayout('rtk11.lyt') as bl:
-        layout = bl.read_layout()
+        bp.parsefile(binary_filename)
 ```
 
