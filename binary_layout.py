@@ -7,6 +7,7 @@ class InvalidLayoutError(Exception):
 class BinaryLayout():
     def __init__(self, layoutfname):
         self.layoutfname = layoutfname
+        self.sections = 0
 
     def __enter__(self):
         self.layout = open(self.layoutfname)
@@ -14,25 +15,39 @@ class BinaryLayout():
         lineno = 0
         while line != 'endfile':
             if line.startswith('begin'):
+                self.sections += 1
                 line = self.layout.readline().strip()
                 lineno += 1
-                if len(line.split(' ')) != 4:
+                try:
+                    name, _, total, _ = line.split(' ')
+                except:
                     raise InvalidLayoutError(
                         'table must have four arguments', lineno)
 
                 line = self.layout.readline().strip()
+                section_lineno = lineno
                 lineno += 1
+                subtotal = 0
                 while line != 'end':
                     if line.startswith('padding'):
-                        if len(line.split(' ')) != 2:
+                        try:
+                            _, length = line.split(' ')
+                            subtotal += int(length)
+                        except:
                             raise InvalidLayoutError(
                                 'padding must have one argument', lineno)
                     else:
-                        if len(line.split(' ')) != 3:
+                        try:
+                            _, _, length = line.split(' ')
+                            subtotal += int(length)
+                        except:
                             raise InvalidLayoutError(
                                 'column must have three arguments', lineno)
                     line = self.layout.readline().strip()
                     lineno += 1
+                if subtotal != int(total):
+                    raise InvalidLayoutError(
+                        f'lengths of section {name} do not add up to {total}', section_lineno)
             line = self.layout.readline().strip()
             lineno += 1
         self.layout.seek(0)
