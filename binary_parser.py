@@ -1,3 +1,8 @@
+import sqlite3
+import string
+from pprint import pprint
+
+
 class InvalidLayoutError(Exception):
     def __init__(self, message, linenumber):
         self.message = f"\n\tError in layout file at line {linenumber}:\n\t{message}"
@@ -5,23 +10,24 @@ class InvalidLayoutError(Exception):
 
 
 class BinaryParser():
-    def __init__(self, layoutfname):
+    def __init__(self, layoutfname: str, byteorder='little', encoding='utf-8'):
         self.layoutfname = layoutfname
+        self.byteorder = byteorder
+        self.encoding = encoding
         self.sections = 0
 
     def __enter__(self):
-        """Parses the layout file and adds offsets and data lenghts to a dictionary containing the data.
-        """
         self.layout = open(self.layoutfname)
         self.parse_layout()
         return self
 
     def __exit__(self, type, value, traceback):
-        # Exception handling here
         self.layout.close()
 
     def parse_layout(self):
-        self.schema = {}
+        """Parses the layout file and adds offsets and data lenghts to a dictionary containing the data.
+        """
+        self.data = {}
         line = ''
         lineno = 0
         while line != 'endfile':
@@ -30,52 +36,129 @@ class BinaryParser():
                 line = self.layout.readline().strip()
                 lineno += 1
                 try:
-                    tablename, baseoffset, total, repetitions \
-                        = line.split(' ')
-                    baseoffset = int(baseoffset)
-                    total = int(total)
-                    repetitions = int(repetitions)
+                    tablename, baseoffset, total, counts = line.split(' ')
                 except:
                     raise InvalidLayoutError(
                         'table must have four arguments', lineno)
-                if not tablename in self.schema:
-                    self.schema[tablename] = {}
-                    self.schema[tablename]['columns'] = {}
-                    self.schema[tablename]['count'] = repetitions
+                baseoffset = int(baseoffset)
+                total = int(total)
+                counts = int(counts)
+
+                # Initialise table
+                if not tablename in self.data:
+                    self.data[tablename] = {
+                        'sections': [],
+                        'count': counts,
+                    }
+
+                if counts != self.data[tablename]['count']:
+                    raise InvalidLayoutError(
+                        f'Counts for table {tablename} must be equal for all sections of table {tablename}.', lineno)
 
                 dataoffset = 0
                 line = self.layout.readline().strip()
                 section_lineno = lineno
                 lineno += 1
                 subtotal = 0
+                section = []
                 while line != 'end':
                     if line.startswith('padding'):
                         try:
                             _, datalen = line.split(' ')
-                            datalen = int(datalen)
-                            subtotal += datalen
                         except:
                             raise InvalidLayoutError(
                                 'padding must have one argument', lineno)
+                        datalen = int(datalen)
+                        section.append((
+                            'padding',
+                            'int',
+                            baseoffset+dataoffset,
+                            datalen
+                        ))
+                        subtotal += datalen
                     else:
                         try:
-                            dataname, datatype, datalen \
+                            columnname, datatype, datalen \
                                 = line.split(' ')
-                            datalen = int(datalen)
-                            self.schema[tablename]['columns'][dataname] = [
-                                datatype,
-                                baseoffset+dataoffset,
-                                datalen
-                            ]
-                            subtotal += datalen
                         except:
                             raise InvalidLayoutError(
                                 'column must have three arguments', lineno)
+                        datalen = int(datalen)
+                        section.append((
+                            columnname,
+                            datatype,
+                            baseoffset+dataoffset,
+                            datalen
+                        ))
+                        subtotal += datalen
                     dataoffset += datalen
                     line = self.layout.readline().strip()
                     lineno += 1
                 if subtotal != int(total):
                     raise InvalidLayoutError(
                         f'lengths of section {tablename} do not add up to {total}', section_lineno)
+                self.data[tablename]['sections'].append({
+                    'offset': baseoffset,
+                    'data': section
+                })
             line = self.layout.readline().strip()
             lineno += 1
+
+    def parseint(self, bytes):
+        return int.from_bytes(bytes, self.byteorder)
+
+    def parsestr(self, bytes: bytes):
+        return ''.join([c for c in bytes.decode(self.encoding) if c.isalnum() or c.isspace() or c in string.punctuation])
+
+    def paramstr(self, n):
+        return f"({','.join(['?']*n)})"
+
+    def create_table_query(self, tablename, columns):
+        columnstring = ',\n'.join(
+            [f"\t{column[0]} {'TEXT' if column[1] == 'str' else 'INTEGER'}" for column in columns])
+        query = f"CREATE TABLE IF NOT EXISTS {tablename} (\n{columnstring}\n);"
+        return query
+
+    def create_section_query(self, tablename, columnnames, datas):
+        columnstring = ', '.join(columnnames)
+        querystring = f"INSERT INTO {tablename} ({columnstring})\nVALUES\n{self.paramstr(len(columnnames))};"
+        return querystring
+
+    def parse_file(self, binaryfname, dst_path):
+        f = open(binaryfname, 'rb')
+
+        conn = sqlite3.connect(dst_path)
+        for tablename, tabledata in self.data.items():
+            columns = []
+            for section in tabledata['sections']:
+                for column in section['data']:
+                    if column[0] != 'padding':
+                        columns.append(column)
+
+            query = self.create_table_query(tablename, columns)
+            conn.execute(query)
+
+            for section in tabledata['sections']:
+                columnnames = [
+                    name for name in
+                    list(zip(*section['data']))[0] if name != 'padding']
+
+                f.seek(section['offset'])
+                datas = []
+                for _ in range(tabledata['count']):
+                    data = []
+                    for name, type, _, length in section['  data']:
+                        if name == 'padding':
+                            # Skip
+                            f.read(length)
+                            continue
+                        if type == 'int':
+                            data.append(self.parseint(f.read(length)))
+                        elif type == 'str':
+                            data.append(self.parsestr(f.read(length)))
+                    datas.append(data)
+                query = self.create_section_query(
+                    tablename, columnnames, datas)
+                conn.executemany(query, datas)
+            conn.commit()
+        conn.close()
