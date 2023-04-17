@@ -4,7 +4,7 @@ Provides a parser for a custom file format for easily reading a binary file give
 
 Each block signifies a contiguous block of data. Padding can be denoted as `padding <padding length>`.
 
-## Format
+## Layout file format
 
 ```
 begin
