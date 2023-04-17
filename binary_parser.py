@@ -147,7 +147,7 @@ class BinaryParser():
                 datas = []
                 for _ in range(tabledata['count']):
                     data = []
-                    for name, type, _, length in section['  data']:
+                    for name, type, _, length in section['data']:
                         if name == 'padding':
                             # Skip
                             f.read(length)
@@ -160,5 +160,5 @@ class BinaryParser():
                 query = self.create_section_query(
                     tablename, columnnames, datas)
                 conn.executemany(query, datas)
-            conn.commit()
+        conn.commit()
         conn.close()
