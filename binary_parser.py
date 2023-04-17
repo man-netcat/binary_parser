@@ -4,13 +4,24 @@ class InvalidLayoutError(Exception):
         super().__init__(self.message)
 
 
-class BinaryLayout():
+class BinaryParser():
     def __init__(self, layoutfname):
         self.layoutfname = layoutfname
         self.sections = 0
 
     def __enter__(self):
+        """Parses the layout file and adds offsets and data lenghts to a dictionary containing the data.
+        """
         self.layout = open(self.layoutfname)
+        self.parse_layout()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        # Exception handling here
+        self.layout.close()
+
+    def parse_layout(self):
+        self.schema = {}
         line = ''
         lineno = 0
         while line != 'endfile':
@@ -19,56 +30,14 @@ class BinaryLayout():
                 line = self.layout.readline().strip()
                 lineno += 1
                 try:
-                    name, _, total, _ = line.split(' ')
+                    tablename, baseoffset, total, repetitions \
+                        = line.split(' ')
+                    baseoffset = int(baseoffset)
+                    total = int(total)
+                    repetitions = int(repetitions)
                 except:
                     raise InvalidLayoutError(
                         'table must have four arguments', lineno)
-
-                line = self.layout.readline().strip()
-                section_lineno = lineno
-                lineno += 1
-                subtotal = 0
-                while line != 'end':
-                    if line.startswith('padding'):
-                        try:
-                            _, length = line.split(' ')
-                            subtotal += int(length)
-                        except:
-                            raise InvalidLayoutError(
-                                'padding must have one argument', lineno)
-                    else:
-                        try:
-                            _, _, length = line.split(' ')
-                            subtotal += int(length)
-                        except:
-                            raise InvalidLayoutError(
-                                'column must have three arguments', lineno)
-                    line = self.layout.readline().strip()
-                    lineno += 1
-                if subtotal != int(total):
-                    raise InvalidLayoutError(
-                        f'lengths of section {name} do not add up to {total}', section_lineno)
-            line = self.layout.readline().strip()
-            lineno += 1
-        self.layout.seek(0)
-        return self
-
-    def __exit__(self, type, value, traceback):
-        # Exception handling here
-        self.layout.close()
-
-    def read_layout(self) -> dict:
-        self.schema = {}
-        line = ''
-        while line != 'endfile':
-            if line.startswith('begin'):
-                line = self.layout.readline().strip()
-                tablename, baseoffset, total_length, repetitions \
-                    = line.split(' ')
-                baseoffset = int(baseoffset)
-                total_length = int(total_length)
-                repetitions = int(repetitions)
-
                 if not tablename in self.schema:
                     self.schema[tablename] = {}
                     self.schema[tablename]['columns'] = {}
@@ -76,19 +45,37 @@ class BinaryLayout():
 
                 dataoffset = 0
                 line = self.layout.readline().strip()
+                section_lineno = lineno
+                lineno += 1
+                subtotal = 0
                 while line != 'end':
                     if line.startswith('padding'):
-                        _, datalen = line.split(' ')
-                        datalen = int(datalen)
+                        try:
+                            _, datalen = line.split(' ')
+                            datalen = int(datalen)
+                            subtotal += datalen
+                        except:
+                            raise InvalidLayoutError(
+                                'padding must have one argument', lineno)
                     else:
-                        dataname, datatype, datalen \
-                            = line.split(' ')
-                        datalen = int(datalen)
-                        self.schema[tablename]['columns'][dataname] = \
-                            [datatype,
+                        try:
+                            dataname, datatype, datalen \
+                                = line.split(' ')
+                            datalen = int(datalen)
+                            self.schema[tablename]['columns'][dataname] = [
+                                datatype,
                                 baseoffset+dataoffset,
-                                datalen]
+                                datalen
+                            ]
+                            subtotal += datalen
+                        except:
+                            raise InvalidLayoutError(
+                                'column must have three arguments', lineno)
                     dataoffset += datalen
                     line = self.layout.readline().strip()
+                    lineno += 1
+                if subtotal != int(total):
+                    raise InvalidLayoutError(
+                        f'lengths of section {tablename} do not add up to {total}', section_lineno)
             line = self.layout.readline().strip()
-        return self.schema
+            lineno += 1
