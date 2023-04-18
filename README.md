@@ -35,7 +35,7 @@ In this example we show two sections for `table_1` and `table_2`. Section `table
 ## Example usage in Python project
 
 ```
-with BinaryLayout('rtk11.lyt') as bl:
-        bp.parsefile(binary_filename)
+with BinaryLayout('rtk11.lyt') as bp:
+        bp.parsefile(binary_filename, db_path)
 ```
 
