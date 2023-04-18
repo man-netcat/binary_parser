@@ -104,7 +104,7 @@ class BinaryParser():
             lineno += 1
 
     def parseint(self, bytes):
-        return int.from_bytes(bytes, self.byteorder)
+        return int.from_bytes(bytes, self.byteorder)  # type: ignore
 
     def parsestr(self, bytes: bytes):
         return ''.join([c for c in bytes.decode(self.encoding) if c.isalnum() or c.isspace() or c in string.punctuation])
