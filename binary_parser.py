@@ -112,13 +112,13 @@ class BinaryParser():
     def paramstr(self, n):
         return f"({','.join(['?']*n)})"
 
-    def create_table_query(self, tablename, columns):
+    def create_query(self, tablename, columns):
         columnstring = ','.join(
             [f"`{column[0]}` {'TEXT' if column[1] == 'str' else 'INTEGER'}" for column in columns])
         query = f"CREATE TABLE IF NOT EXISTS `{tablename}` (id INTEGER PRIMARY KEY AUTOINCREMENT,{columnstring});"
         return query
 
-    def create_section_query(self, tablename, columnnames):
+    def insert_query(self, tablename, columnnames):
         columnstring = ', '.join(columnnames)
         querystring = f"INSERT INTO `{tablename}` ({columnstring}) VALUES {self.paramstr(len(columnnames))};"
         return querystring
@@ -127,36 +127,35 @@ class BinaryParser():
         f = open(binaryfname, 'rb')
 
         conn = sqlite3.connect(dst_path)
-        for tablename, tabledata in self.data.items():
+        for tablename, tableinfo in self.data.items():
             columns = []
-            for section in tabledata['sections']:
+            for section in tableinfo['sections']:
                 for column in section['data']:
                     if column[0] != 'padding':
                         columns.append(column)
 
-            query = self.create_table_query(tablename, columns)
+            query = self.create_query(tablename, columns)
             conn.execute(query)
 
-            for section in tabledata['sections']:
-                columnnames = [
+            tablecolumnnames = []
+            tabledata = [[] for _ in range(tableinfo['count'])]
+            for section in tableinfo['sections']:
+                sectioncolumnnames = [
                     name for name in
                     list(zip(*section['data']))[0] if name != 'padding']
-
+                tablecolumnnames.extend(sectioncolumnnames)
                 f.seek(section['offset'])
-                datas = []
-                for _ in range(tabledata['count']):
-                    data = []
+                for columndata in tabledata:
                     for name, type, _, length in section['data']:
                         if name == 'padding':
                             # Skip
                             f.read(length)
                             continue
                         if type == 'int':
-                            data.append(self.parseint(f.read(length)))
+                            columndata.append(self.parseint(f.read(length)))
                         elif type == 'str':
-                            data.append(self.parsestr(f.read(length)))
-                    datas.append(data)
-                query = self.create_section_query(tablename, columnnames)
-                conn.executemany(query, datas)
+                            columndata.append(self.parsestr(f.read(length)))
+            query = self.insert_query(tablename, tablecolumnnames)
+            conn.executemany(query, tabledata)
         conn.commit()
         conn.close()
