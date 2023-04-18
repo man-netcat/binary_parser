@@ -1,3 +1,4 @@
+import argparse
 import sqlite3
 import string
 
@@ -162,3 +163,20 @@ class BinaryParser():
 
         conn.commit()
         conn.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog='Binary Parser',
+        description='Parses a binary file given a binary data layout file, a binary file and a database file to store the data in')
+    parser.add_argument('layoutfile')
+    parser.add_argument('binaryfile')
+    parser.add_argument('database')
+    args = parser.parse_args()
+
+    with BinaryParser(args.layoutfile) as bp:
+        bp.parse_file(args.binaryfile, args.database)
+
+
+if __name__ == '__main__':
+    main()
