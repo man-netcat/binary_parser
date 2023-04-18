@@ -1,6 +1,5 @@
 import sqlite3
 import string
-from pprint import pprint
 
 
 class InvalidLayoutError(Exception):
@@ -114,14 +113,14 @@ class BinaryParser():
         return f"({','.join(['?']*n)})"
 
     def create_table_query(self, tablename, columns):
-        columnstring = ',\n'.join(
-            [f"\t{column[0]} {'TEXT' if column[1] == 'str' else 'INTEGER'}" for column in columns])
-        query = f"CREATE TABLE IF NOT EXISTS {tablename} (\n{columnstring}\n);"
+        columnstring = ','.join(
+            [f"`{column[0]}` {'TEXT' if column[1] == 'str' else 'INTEGER'}" for column in columns])
+        query = f"CREATE TABLE IF NOT EXISTS `{tablename}` (id INTEGER PRIMARY KEY AUTOINCREMENT,{columnstring});"
         return query
 
-    def create_section_query(self, tablename, columnnames, datas):
+    def create_section_query(self, tablename, columnnames):
         columnstring = ', '.join(columnnames)
-        querystring = f"INSERT INTO {tablename} ({columnstring})\nVALUES\n{self.paramstr(len(columnnames))};"
+        querystring = f"INSERT INTO `{tablename}` ({columnstring}) VALUES {self.paramstr(len(columnnames))};"
         return querystring
 
     def parse_file(self, binaryfname, dst_path):
@@ -157,8 +156,7 @@ class BinaryParser():
                         elif type == 'str':
                             data.append(self.parsestr(f.read(length)))
                     datas.append(data)
-                query = self.create_section_query(
-                    tablename, columnnames, datas)
+                query = self.create_section_query(tablename, columnnames)
                 conn.executemany(query, datas)
         conn.commit()
         conn.close()
