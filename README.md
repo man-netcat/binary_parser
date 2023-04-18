@@ -1,8 +1,6 @@
 # Binary File Parser
 
-Provides a parser for a custom file format for easily reading a binary file given data offsets and lengths. After parsing the data, it can be stored in an sqlite database.
-
-Each block signifies a contiguous block of data. Padding can be denoted as `padding <padding length>`.
+Provides a parser for a user-defined binary layout for easily reading a binary file given data offsets and lengths. After parsing the data, it can be stored in an sqlite database.
 
 ## Layout file format
 
@@ -12,6 +10,8 @@ begin
     <column_name> <data_type> <data_length>
 end
 ```
+
+Each block signifies a contiguous block of data. Padding can be denoted as `padding <padding length>`.
 
 ## Example layout section
 
