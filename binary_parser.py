@@ -127,24 +127,25 @@ class BinaryParser():
         f = open(binaryfname, 'rb')
 
         conn = sqlite3.connect(dst_path)
-        for tablename, tableinfo in self.data.items():
-            columns = []
-            for section in tableinfo['sections']:
-                for column in section['data']:
-                    if column[0] != 'padding':
-                        columns.append(column)
+
+        for tablename, tablelayout in self.data.items():
+            columns = [
+                column
+                for section in tablelayout['sections']
+                for column in section['data']
+                if column[0] != 'padding'
+            ]
 
             query = self.create_query(tablename, columns)
             conn.execute(query)
 
-            tablecolumnnames = []
-            tabledata = [[] for _ in range(tableinfo['count'])]
-            for section in tableinfo['sections']:
-                sectioncolumnnames = [
-                    name for name in
-                    list(zip(*section['data']))[0] if name != 'padding']
-                tablecolumnnames.extend(sectioncolumnnames)
+            tablecolumnnames = list(zip(*columns))[0]
+
+            tabledata = [[] for _ in range(tablelayout['count'])]
+
+            for section in tablelayout['sections']:
                 f.seek(section['offset'])
+
                 for columndata in tabledata:
                     for name, type, _, length in section['data']:
                         if name == 'padding':
@@ -155,7 +156,9 @@ class BinaryParser():
                             columndata.append(self.parseint(f.read(length)))
                         elif type == 'str':
                             columndata.append(self.parsestr(f.read(length)))
+
             query = self.insert_query(tablename, tablecolumnnames)
             conn.executemany(query, tabledata)
+
         conn.commit()
         conn.close()
