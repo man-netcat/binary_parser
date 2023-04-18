@@ -167,7 +167,7 @@ class BinaryParser():
 
 def main():
     parser = argparse.ArgumentParser(
-        prog='Binary Parser',
+        prog='python3 binary_parser.py',
         description='Parses a binary file given a binary data layout file, a binary file and a database file to store the data in')
     parser.add_argument('layoutfile')
     parser.add_argument('binaryfile')
