@@ -35,7 +35,9 @@ In this example we show two sections for `table_1` and `table_2`. Section `table
 ## Example usage in Python project
 
 ```
-with BinaryLayout('rtk11.lyt') as bp:
-        bp.parsefile(binary_filename, db_path)
+def main():
+    with BinaryParser('layout.lyt') as bp:
+        bp.parse_file(binary_path, db_path)
 ```
 
+This example opens the layout file `layout.lyt` and parses a given binary file given by `binary_path`, storing the parsed data in the database file given by `db_path`.
