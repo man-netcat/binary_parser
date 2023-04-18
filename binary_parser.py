@@ -40,7 +40,7 @@ class BinaryParser():
                 except:
                     raise InvalidLayoutError(
                         'table must have four arguments', lineno)
-                baseoffset = int(baseoffset)
+                baseoffset = int(baseoffset, 0)  # Supports hexadecimal
                 total = int(total)
                 counts = int(counts)
 
