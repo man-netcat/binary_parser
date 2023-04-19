@@ -10,14 +10,14 @@ class InvalidLayoutError(Exception):
 
 
 class BinaryParser():
-    def __init__(self, layoutfname: str, byteorder='little', encoding='utf-8'):
-        self.layoutfname = layoutfname
+    def __init__(self, layout_path: str, byteorder='little', encoding='utf-8'):
+        self.layout_path = layout_path
         self.byteorder = byteorder
         self.encoding = encoding
         self.sections = 0
 
     def __enter__(self):
-        self.layout = open(self.layoutfname)
+        self.layout = open(self.layout_path)
         self.parse_layout()
         return self
 
@@ -104,11 +104,17 @@ class BinaryParser():
             line = self.layout.readline().strip()
             lineno += 1
 
-    def parseint(self, bytes):
+    def bytes_to_int(self, bytes):
         return int.from_bytes(bytes, self.byteorder)  # type: ignore
 
-    def parsestr(self, bytes: bytes):
+    def bytes_to_str(self, bytes: bytes):
         return ''.join([c for c in bytes.decode(self.encoding) if c.isalnum() or c.isspace() or c in string.punctuation])
+
+    def str_to_bytes(self, str: str):
+        return bytearray(str, encoding=self.encoding)
+
+    def int_to_bytes(self, int: int):
+        return bytearray(int)
 
     def paramstr(self, n):
         return f"({','.join(['?']*n)})"
@@ -124,10 +130,10 @@ class BinaryParser():
         querystring = f"INSERT INTO `{tablename}` ({columnstring}) VALUES {self.paramstr(len(columnnames))};"
         return querystring
 
-    def parse_file(self, binaryfname, dst_path):
-        f = open(binaryfname, 'rb')
+    def parse_file(self, binary_path, db_path):
+        f = open(binary_path, 'rb')
 
-        conn = sqlite3.connect(dst_path)
+        conn = sqlite3.connect(db_path)
 
         for tablename, tablelayout in self.data.items():
             columns = [
@@ -154,15 +160,50 @@ class BinaryParser():
                             f.read(length)
                             continue
                         if type == 'int':
-                            columndata.append(self.parseint(f.read(length)))
+                            columndata.append(
+                                self.bytes_to_int(f.read(length)))
                         elif type == 'str':
-                            columndata.append(self.parsestr(f.read(length)))
+                            columndata.append(
+                                self.bytes_to_str(f.read(length)))
 
             query = self.insert_query(tablename, tablecolumnnames)
             conn.executemany(query, tabledata)
 
         conn.commit()
         conn.close()
+        f.close()
+
+    def select_query(self, tablename, section):
+        columnnames = [column for column in list(
+            zip(*section['data']))[0] if column != 'padding']
+        query = f"SELECT {','.join([f'`{column}`' for column in columnnames])} FROM `{tablename}`"
+        return query
+
+    def write_back(self, binary_path, db_path):
+        f = open(binary_path, 'rb+')
+
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+
+        for tablename, tablelayout in self.data.items():
+            for section in tablelayout['sections']:
+                query = self.select_query(tablename, section)
+                cur.execute(query)
+                data = [item for sublist in cur.fetchall() for item in sublist]
+                dataindex = 0
+                for name, type, offset, _ in section['data']:
+                    print(offset)
+                    if name == 'padding':
+                        continue
+                    f.seek(offset)
+                    if type == 'str':
+                        f.write(self.str_to_bytes(data[dataindex]))
+                    elif type == 'int':
+                        f.write(self.int_to_bytes(data[dataindex]))
+                    dataindex += 1
+
+        conn.close()
+        f.close()
 
 
 def main():
