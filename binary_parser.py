@@ -115,7 +115,7 @@ class BinaryParser():
 
     def create_query(self, tablename, columns):
         columnstring = ','.join(
-            [f"`{column[0]}` {'TEXT' if column[1] == 'str' else 'INTEGER'}" for column in columns])
+            [f"`{column[0]}` {'TEXT' if column[1] == 'str' else 'INTEGER'}({column[3]})" for column in columns])
         query = f"CREATE TABLE IF NOT EXISTS `{tablename}` (id INTEGER PRIMARY KEY AUTOINCREMENT,{columnstring});"
         return query
 
