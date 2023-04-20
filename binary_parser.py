@@ -55,7 +55,6 @@ class BinaryParser():
                     raise InvalidLayoutError(
                         f'Counts for table {tablename} must be equal for all sections of table {tablename}.', lineno)
 
-                dataoffset = 0
                 line = self.layout.readline().strip()
                 section_lineno = lineno
                 lineno += 1
@@ -72,7 +71,6 @@ class BinaryParser():
                         section.append((
                             'padding',
                             'int',
-                            baseoffset+dataoffset,
                             datalen
                         ))
                         subtotal += datalen
@@ -87,11 +85,9 @@ class BinaryParser():
                         section.append((
                             columnname,
                             datatype,
-                            baseoffset+dataoffset,
                             datalen
                         ))
                         subtotal += datalen
-                    dataoffset += datalen
                     line = self.layout.readline().strip()
                     lineno += 1
                 if subtotal != int(total):
@@ -113,15 +109,15 @@ class BinaryParser():
     def str_to_bytes(self, str: str):
         return bytearray(str, encoding=self.encoding)
 
-    def int_to_bytes(self, int: int):
-        return bytearray(int)
+    def int_to_bytes(self, int: int, length):
+        return int.to_bytes(length, self.byteorder)  # type: ignore
 
     def paramstr(self, n):
         return f"({','.join(['?']*n)})"
 
     def create_query(self, tablename, columns):
         columnstring = ','.join(
-            [f"`{column[0]}` {'TEXT' if column[1] == 'str' else 'INTEGER'}({column[3]})" for column in columns])
+            [f"`{column[0]}` {'TEXT' if column[1] == 'str' else 'INTEGER'}({column[2]})" for column in columns])
         query = f"CREATE TABLE IF NOT EXISTS `{tablename}` (id INTEGER PRIMARY KEY AUTOINCREMENT,{columnstring});"
         return query
 
@@ -154,17 +150,19 @@ class BinaryParser():
                 f.seek(section['offset'])
 
                 for columndata in tabledata:
-                    for name, type, _, length in section['data']:
+                    for name, type, length in section['data']:
                         if name == 'padding':
                             # Skip
                             f.read(length)
                             continue
+                        bytes = f.read(length)
                         if type == 'int':
-                            columndata.append(
-                                self.bytes_to_int(f.read(length)))
+                            data = self.bytes_to_int(bytes)
                         elif type == 'str':
-                            columndata.append(
-                                self.bytes_to_str(f.read(length)))
+                            data = self.bytes_to_str(bytes)
+                        else:
+                            raise TypeError
+                        columndata.append(data)
 
             query = self.insert_query(tablename, tablecolumnnames)
             conn.executemany(query, tabledata)
@@ -189,18 +187,34 @@ class BinaryParser():
             for section in tablelayout['sections']:
                 query = self.select_query(tablename, section)
                 cur.execute(query)
-                data = [item for sublist in cur.fetchall() for item in sublist]
-                dataindex = 0
-                for name, type, offset, _ in section['data']:
-                    print(offset)
-                    if name == 'padding':
-                        continue
-                    f.seek(offset)
-                    if type == 'str':
-                        f.write(self.str_to_bytes(data[dataindex]))
-                    elif type == 'int':
-                        f.write(self.int_to_bytes(data[dataindex]))
-                    dataindex += 1
+                data = cur.fetchall()
+                bytearr = bytearray()
+                for entry in data:
+                    idx = 0  # Index in the data entry without padding
+                    for name, type, length in section['data']:
+                        if name == 'padding':
+                            # Fill section with zeroes
+                            bytearr.extend([0x00 for _ in range(length)])
+                        else:
+                            pass
+                            if type == 'str':
+                                # Convert string of chars to bytes
+                                byteobj = self.str_to_bytes(entry[idx])
+                                # Add extra padding to end of string
+                                padding = length - len(entry[idx])
+                                byteobj.extend([0x00 for _ in range(padding)])
+                            elif type == 'int':
+                                # Convert n-byte integer to bytes
+                                byteobj = self.int_to_bytes(
+                                    entry[idx], length)
+                            else:
+                                raise TypeError
+                            # Add the section to the byte array
+                            bytearr.extend(byteobj)
+                            idx += 1
+                # Find offset in binary file to write to
+                f.seek(section['offset'])
+                f.write(bytearr)
 
         conn.close()
         f.close()
