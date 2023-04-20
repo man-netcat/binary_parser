@@ -224,13 +224,34 @@ def main():
     parser = argparse.ArgumentParser(
         prog='python3 binary_parser.py',
         description='Parses a binary file given a binary data layout file, a binary file and a database file to store the data in')
-    parser.add_argument('layoutfile')
-    parser.add_argument('binaryfile')
-    parser.add_argument('database')
+    modegroup = parser.add_mutually_exclusive_group(required=True)
+    modegroup.add_argument(
+        '-r',
+        action='store_true',
+        help='Use -r for reading a file and storing the data into a database.')
+    modegroup.add_argument(
+        '-w',
+        action='store_true',
+        help='Use -w to write the data from a database back into a binary file.')
+    parser.add_argument(
+        'layoutfile',
+        help='The binary file describing the data layout of the binary file.')
+    parser.add_argument(
+        'binaryfile',
+        help='The binary file to parse.')
+    parser.add_argument(
+        'database',
+        help='The database file for storing the data parsed from the binary file.')
     args = parser.parse_args()
 
     with BinaryParser(args.layoutfile) as bp:
-        bp.parse_file(args.binaryfile, args.database)
+        if args.r:
+            bp.parse_file(args.binaryfile, args.database)
+        elif args.w:
+            bp.write_back(args.binaryfile, args.database)
+        else:
+            print(
+                "No mode of operation provided.\nPlease consult the instructions using -h.")
 
 
 if __name__ == '__main__':
