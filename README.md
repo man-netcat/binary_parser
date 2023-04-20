@@ -42,6 +42,8 @@ In this example we show two sections for `table_1` and `table_2`. Section `table
 def main():
     with BinaryParser('layout.lyt') as bp:
         bp.parse_file(binary_path, db_path)
+        bp.write_back(new_binary_path, db_path)
 ```
 
 This example opens the layout file `layout.lyt` and parses a given binary file given by `binary_path`, storing the parsed data in the database file given by `db_path`.
+The data is then written back to a new file at `new_binary_path`, which ideally should be identical to the original file, given that the layout file is comprehensive.
