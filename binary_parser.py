@@ -10,14 +10,14 @@ class InvalidLayoutError(Exception):
 
 
 class BinaryParser():
-    def __init__(self, layoutfname: str, byteorder='little', encoding='utf-8'):
-        self.layoutfname = layoutfname
+    def __init__(self, layout_path: str, byteorder='little', encoding='utf-8'):
+        self.layout_path = layout_path
         self.byteorder = byteorder
         self.encoding = encoding
         self.sections = 0
 
     def __enter__(self):
-        self.layout = open(self.layoutfname)
+        self.layout = open(self.layout_path)
         self.parse_layout()
         return self
 
@@ -55,7 +55,6 @@ class BinaryParser():
                     raise InvalidLayoutError(
                         f'Counts for table {tablename} must be equal for all sections of table {tablename}.', lineno)
 
-                dataoffset = 0
                 line = self.layout.readline().strip()
                 section_lineno = lineno
                 lineno += 1
@@ -72,7 +71,6 @@ class BinaryParser():
                         section.append((
                             'padding',
                             'int',
-                            baseoffset+dataoffset,
                             datalen
                         ))
                         subtotal += datalen
@@ -87,11 +85,9 @@ class BinaryParser():
                         section.append((
                             columnname,
                             datatype,
-                            baseoffset+dataoffset,
                             datalen
                         ))
                         subtotal += datalen
-                    dataoffset += datalen
                     line = self.layout.readline().strip()
                     lineno += 1
                 if subtotal != int(total):
@@ -104,18 +100,24 @@ class BinaryParser():
             line = self.layout.readline().strip()
             lineno += 1
 
-    def parseint(self, bytes):
+    def bytes_to_int(self, bytes):
         return int.from_bytes(bytes, self.byteorder)  # type: ignore
 
-    def parsestr(self, bytes: bytes):
+    def bytes_to_str(self, bytes: bytes):
         return ''.join([c for c in bytes.decode(self.encoding) if c.isalnum() or c.isspace() or c in string.punctuation])
+
+    def str_to_bytes(self, str: str):
+        return bytearray(str, encoding=self.encoding)
+
+    def int_to_bytes(self, int: int, length):
+        return int.to_bytes(length, self.byteorder)  # type: ignore
 
     def paramstr(self, n):
         return f"({','.join(['?']*n)})"
 
     def create_query(self, tablename, columns):
         columnstring = ','.join(
-            [f"`{column[0]}` {'TEXT' if column[1] == 'str' else 'INTEGER'}({column[3]})" for column in columns])
+            [f"`{column[0]}` {'TEXT' if column[1] == 'str' else 'INTEGER'}({column[2]})" for column in columns])
         query = f"CREATE TABLE IF NOT EXISTS `{tablename}` (id INTEGER PRIMARY KEY AUTOINCREMENT,{columnstring});"
         return query
 
@@ -124,10 +126,10 @@ class BinaryParser():
         querystring = f"INSERT INTO `{tablename}` ({columnstring}) VALUES {self.paramstr(len(columnnames))};"
         return querystring
 
-    def parse_file(self, binaryfname, dst_path):
-        f = open(binaryfname, 'rb')
+    def parse_file(self, binary_path, db_path):
+        f = open(binary_path, 'rb')
 
-        conn = sqlite3.connect(dst_path)
+        conn = sqlite3.connect(db_path)
 
         for tablename, tablelayout in self.data.items():
             columns = [
@@ -148,21 +150,74 @@ class BinaryParser():
                 f.seek(section['offset'])
 
                 for columndata in tabledata:
-                    for name, type, _, length in section['data']:
+                    for name, type, length in section['data']:
                         if name == 'padding':
                             # Skip
                             f.read(length)
                             continue
+                        bytes = f.read(length)
                         if type == 'int':
-                            columndata.append(self.parseint(f.read(length)))
+                            data = self.bytes_to_int(bytes)
                         elif type == 'str':
-                            columndata.append(self.parsestr(f.read(length)))
+                            data = self.bytes_to_str(bytes)
+                        else:
+                            raise TypeError
+                        columndata.append(data)
 
             query = self.insert_query(tablename, tablecolumnnames)
             conn.executemany(query, tabledata)
 
         conn.commit()
         conn.close()
+        f.close()
+
+    def select_query(self, tablename, section):
+        columnnames = [column for column in list(
+            zip(*section['data']))[0] if column != 'padding']
+        query = f"SELECT {','.join([f'`{column}`' for column in columnnames])} FROM `{tablename}`"
+        return query
+
+    def write_back(self, binary_path, db_path):
+        f = open(binary_path, 'rb+')
+
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+
+        for tablename, tablelayout in self.data.items():
+            for section in tablelayout['sections']:
+                query = self.select_query(tablename, section)
+                cur.execute(query)
+                data = cur.fetchall()
+                bytearr = bytearray()
+                for entry in data:
+                    idx = 0  # Index in the data entry without padding
+                    for name, type, length in section['data']:
+                        if name == 'padding':
+                            # Fill section with zeroes
+                            bytearr.extend([0x00 for _ in range(length)])
+                        else:
+                            pass
+                            if type == 'str':
+                                # Convert string of chars to bytes
+                                byteobj = self.str_to_bytes(entry[idx])
+                                # Add extra padding to end of string
+                                padding = length - len(entry[idx])
+                                byteobj.extend([0x00 for _ in range(padding)])
+                            elif type == 'int':
+                                # Convert n-byte integer to bytes
+                                byteobj = self.int_to_bytes(
+                                    entry[idx], length)
+                            else:
+                                raise TypeError
+                            # Add the section to the byte array
+                            bytearr.extend(byteobj)
+                            idx += 1
+                # Find offset in binary file to write to
+                f.seek(section['offset'])
+                f.write(bytearr)
+
+        conn.close()
+        f.close()
 
 
 def main():
