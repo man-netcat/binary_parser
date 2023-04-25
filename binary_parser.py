@@ -100,18 +100,6 @@ class BinaryParser():
             line = self.layout.readline().strip()
             lineno += 1
 
-    def bytes_to_int(self, bytes):
-        return int.from_bytes(bytes, self.byteorder)  # type: ignore
-
-    def bytes_to_str(self, bytes: bytes):
-        return ''.join([c for c in bytes.decode(self.encoding) if c.isalnum() or c.isspace() or c in string.punctuation])
-
-    def str_to_bytes(self, str: str):
-        return bytearray(str, encoding=self.encoding)
-
-    def int_to_bytes(self, int: int, length):
-        return int.to_bytes(length, self.byteorder)  # type: ignore
-
     def paramstr(self, n):
         return f"({','.join(['?']*n)})"
 
@@ -157,9 +145,9 @@ class BinaryParser():
                             continue
                         bytes = f.read(length)
                         if type == 'int':
-                            data = self.bytes_to_int(bytes)
+                            data = int.from_bytes(bytes, self.byteorder)
                         elif type == 'str':
-                            data = self.bytes_to_str(bytes)
+                            data = bytes.decode(self.encoding)
                         else:
                             raise TypeError
                         columndata.append(data)
@@ -196,17 +184,14 @@ class BinaryParser():
                             # Fill section with zeroes
                             bytearr.extend([0x00 for _ in range(length)])
                         else:
-                            pass
                             if type == 'str':
                                 # Convert string of chars to bytes
-                                byteobj = self.str_to_bytes(entry[idx])
-                                # Add extra padding to end of string
-                                padding = length - len(entry[idx])
-                                byteobj.extend([0x00 for _ in range(padding)])
+                                byteobj = bytearray(entry[idx], encoding=self.encoding)
+                                print(len(byteobj))
                             elif type == 'int':
                                 # Convert n-byte integer to bytes
-                                byteobj = self.int_to_bytes(
-                                    entry[idx], length)
+                                byteobj = entry[idx].to_bytes(
+                                    length, self.byteorder)
                             else:
                                 raise TypeError
                             # Add the section to the byte array
