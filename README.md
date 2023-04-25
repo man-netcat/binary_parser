@@ -32,6 +32,11 @@ endfile
 
 In this example we show two sections for `table_1` and `table_2`. Section `table_1` starts at offset 0, has a total length of 10 and repeats three times in the binary file. It contains two items, `column_1` and `column_2`.  `column_1` is an integer value consisting of 2 bytes, and `column_2` is a string value consisting of 8 bytes. The sum of the item lengths must be equal to the total length described in the section definition. 
 
+## Features
+
+- Supports little or big endian byte order.
+- Supports any encoding (Examples are UTF-8 and Shift JIS)
+
 ## Commandline usage
 
 `python3 binary_parser.py <layout file> <binary file> <database file>`
