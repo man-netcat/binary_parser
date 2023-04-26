@@ -186,8 +186,8 @@ class BinaryParser():
                         else:
                             if type == 'str':
                                 # Convert string of chars to bytes
-                                byteobj = bytearray(entry[idx], encoding=self.encoding)
-                                print(len(byteobj))
+                                byteobj = bytearray(
+                                    entry[idx], encoding=self.encoding)
                             elif type == 'int':
                                 # Convert n-byte integer to bytes
                                 byteobj = entry[idx].to_bytes(
