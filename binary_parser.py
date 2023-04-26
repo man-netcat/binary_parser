@@ -1,6 +1,11 @@
 import argparse
+import os
 import sqlite3
 import string
+import sys
+
+from layout_printer import LayoutPrinter
+from PyQt5.QtWidgets import QApplication
 
 
 class InvalidLayoutError(Exception):
@@ -95,7 +100,9 @@ class BinaryParser():
                         f'lengths of section {tablename} do not add up to {total}', section_lineno)
                 self.data[tablename]['sections'].append({
                     'offset': baseoffset,
-                    'data': section
+                    'data': section,
+                    'length': total,
+                    'counts': counts
                 })
             line = self.layout.readline().strip()
             lineno += 1
@@ -186,7 +193,8 @@ class BinaryParser():
                         else:
                             if type == 'str':
                                 # Convert string of chars to bytes
-                                byteobj = bytearray(entry[idx], encoding=self.encoding)
+                                byteobj = bytearray(
+                                    entry[idx], encoding=self.encoding)
                                 print(len(byteobj))
                             elif type == 'int':
                                 # Convert n-byte integer to bytes
@@ -204,6 +212,49 @@ class BinaryParser():
         conn.close()
         f.close()
 
+    def display_layout(self, binary_path):
+        sections = sorted(
+            [
+                section
+                for sections in [
+                    table['sections']
+                    for table in self.data.values()
+                ]
+                for section in sections
+            ],
+            key=lambda x: x['offset']
+        )
+
+        def get_bytes(length):
+            return f.read(length).hex().upper()
+
+        f = open(binary_path, 'rb')
+        filesize = os.path.getsize(binary_path)
+        unused_start = 0
+        values = []
+
+        for section in sections:
+            section_start = section['offset']  # == unused_end
+            section_end = section['offset'] + \
+                section['length'] * section['counts']  # == next unused_start
+            unused_length = section_start - unused_start
+
+            if unused_length > 0:
+                bytes = get_bytes(unused_length)
+                values.append(('padding', 'int', unused_length, bytes))
+            unused_start = section_end
+
+            for _ in range(section['counts']):
+                for value in section['data']:
+                    bytes = get_bytes(value[2])
+                    values.append((*value, bytes))
+
+        lengthsum = sum([value[2] for value in values])
+        unused_length = filesize - unused_start
+        lengthsum += unused_length
+
+        return values
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -218,6 +269,10 @@ def main():
         '-w',
         action='store_true',
         help='Use -w to write the data from a database back into a binary file.')
+    modegroup.add_argument(
+        '-d',
+        action='store_true',
+        help='Use -d to display the binary file with the highlighted layout.')
     parser.add_argument(
         'layoutfile',
         help='The binary file describing the data layout of the binary file.')
@@ -225,15 +280,34 @@ def main():
         'binaryfile',
         help='The binary file to parse.')
     parser.add_argument(
-        'database',
-        help='The database file for storing the data parsed from the binary file.')
+        '-db',
+        help='The database file for storing the data parsed from the binary file.', required=False)
     args = parser.parse_args()
 
     with BinaryParser(args.layoutfile) as bp:
         if args.r:
+            if not args.database:
+                print(
+                    "Must provide a database for -r.\nPlease consult the instructions using -h.")
+                exit()
             bp.parse_file(args.binaryfile, args.database)
         elif args.w:
+            if not args.database:
+                print(
+                    "Must provide a database for -w.\nPlease consult the instructions using -h.")
+                exit()
             bp.write_back(args.binaryfile, args.database)
+        elif args.d:
+            values = bp.display_layout(args.binaryfile)
+            app = QApplication(sys.argv)
+            window = LayoutPrinter()
+
+            for value in values:
+                if value[0] == 'padding':
+                    window.write_text(value[3], color=False)
+                else:
+                    window.write_text(value[3], color=True)
+            sys.exit(app.exec_())
         else:
             print(
                 "No mode of operation provided.\nPlease consult the instructions using -h.")
