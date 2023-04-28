@@ -1,6 +1,5 @@
 import argparse
 import sqlite3
-import string
 
 
 class InvalidLayoutError(Exception):
@@ -160,8 +159,11 @@ class BinaryParser():
         f.close()
 
     def select_query(self, tablename, section):
-        columnnames = [column for column in list(
-            zip(*section['data']))[0] if column != 'padding']
+        columnnames = [
+            column
+            for column in list(zip(*section['data']))[0]
+            if column != 'padding'
+        ]
         query = f"SELECT {','.join([f'`{column}`' for column in columnnames])} FROM `{tablename}`"
         return query
 
@@ -184,14 +186,16 @@ class BinaryParser():
                             # Fill section with zeroes
                             bytearr.extend([0x00 for _ in range(length)])
                         else:
+                            data = entry[idx]
                             if type == 'str':
                                 # Convert string of chars to bytes
                                 byteobj = bytearray(
-                                    entry[idx], encoding=self.encoding)
+                                    data, encoding=self.encoding)
+                                padding_len = length - len(byteobj)
+                                byteobj += b'\x00' * padding_len
                             elif type == 'int':
                                 # Convert n-byte integer to bytes
-                                byteobj = entry[idx].to_bytes(
-                                    length, self.byteorder)
+                                byteobj = data.to_bytes(length, self.byteorder)
                             else:
                                 raise TypeError
                             # Add the section to the byte array
