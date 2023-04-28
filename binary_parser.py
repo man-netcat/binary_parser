@@ -1,5 +1,5 @@
-import argparse
-import sqlite3
+from argparse import ArgumentParser
+from sqlite3 import connect
 
 
 class InvalidLayoutError(Exception):
@@ -117,7 +117,7 @@ class BinaryParser():
     def parse_file(self, binary_path, db_path):
         f = open(binary_path, 'rb')
 
-        conn = sqlite3.connect(db_path)
+        conn = connect(db_path)
 
         for tablename, tablelayout in self.data.items():
             columns = [
@@ -171,7 +171,7 @@ class BinaryParser():
     def write_back(self, binary_path, db_path):
         f = open(binary_path, 'rb+')
 
-        conn = sqlite3.connect(db_path)
+        conn = connect(db_path)
         cur = conn.cursor()
 
         for tablename, tablelayout in self.data.items():
@@ -211,7 +211,7 @@ class BinaryParser():
 
 
 def main():
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         prog='python3 binary_parser.py',
         description='Parses a binary file given a binary data layout file, a binary file and a database file to store the data in')
     modegroup = parser.add_mutually_exclusive_group(required=True)
