@@ -9,11 +9,12 @@ class InvalidLayoutError(Exception):
 
 
 class BinaryParser():
-    def __init__(self, layout_path: str, byteorder='little', encoding='utf-8'):
+    def __init__(self, layout_path: str, byteorder='little', encoding='utf-8', file_offset=0):
         self.layout_path = layout_path
         self.byteorder = byteorder
         self.encoding = encoding
         self.sections = 0
+        self.file_offset = file_offset
 
     def __enter__(self):
         self.layout = open(self.layout_path)
@@ -134,7 +135,7 @@ class BinaryParser():
             tabledata = [[] for _ in range(tablelayout['count'])]
 
             for section in tablelayout['sections']:
-                f.seek(section['offset'])
+                f.seek(section['offset'] + self.file_offset)
 
                 for columndata in tabledata:
                     for name, type, length in section['data']:
@@ -202,7 +203,7 @@ class BinaryParser():
                             bytearr.extend(byteobj)
                             idx += 1
                 # Find offset in binary file to write to
-                f.seek(section['offset'])
+                f.seek(section['offset'] + self.file_offset)
                 f.write(bytearr)
 
         conn.close()
