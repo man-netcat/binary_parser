@@ -209,6 +209,25 @@ class BinaryParser():
         conn.close()
         f.close()
 
+    def write_enum_classes(self, file_path):
+        with open(file_path, 'w') as f:
+            f.write('from enum import Enum\n')
+            for tablename, tablelayout in self.data.items():
+                f.write('\n\n')
+                f.write(f'class {tablename.capitalize()}(Enum):\n')
+                f.write(f'\tID = 0\n')
+                i = 1
+                for section in tablelayout['sections']:
+                    data = section['data']
+                    for value in data:
+                        columnname = value[0]
+                        if columnname != 'padding':
+                            f.write(f'\t{columnname.upper()} = {i}\n')
+                            i += 1
+                f.write('\n')
+                f.write("\tdef __index__(self):\n")
+                f.write('\t\treturn self.value\n')
+
 
 def main():
     parser = ArgumentParser(
@@ -223,6 +242,10 @@ def main():
         '-w',
         action='store_true',
         help='Use -w to write the data from a database back into a binary file.')
+    modegroup.add_argument(
+        '-c',
+        action='store_true',
+        help='Use -c to write a python class file with enums for the given layout.')
     parser.add_argument(
         'layoutfile',
         help='The binary file describing the data layout of the binary file.')
@@ -239,6 +262,8 @@ def main():
             bp.parse_file(args.binaryfile, args.database)
         elif args.w:
             bp.write_back(args.binaryfile, args.database)
+        elif args.c:
+            bp.write_enum_classes("enums.py")
         else:
             print(
                 "No mode of operation provided.\nPlease consult the instructions using -h.")
