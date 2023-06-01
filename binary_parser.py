@@ -8,7 +8,7 @@ class InvalidLayoutError(Exception):
         super().__init__(self.message)
 
 
-class BinaryParser():
+class BinaryParser:
     def __init__(self, layout_path: str, byteorder='little', encoding='utf-8', file_offset=0):
         self.layout_path = layout_path
         self.byteorder = byteorder
@@ -25,8 +25,7 @@ class BinaryParser():
         self.layout.close()
 
     def parse_layout(self):
-        """Parses the layout file and adds offsets and data lenghts to a dictionary containing the data.
-        """
+        """Parses the layout file and adds offsets and data lengths to a dictionary containing the data."""
         self.data = {}
         line = ''
         lineno = 0
@@ -45,7 +44,7 @@ class BinaryParser():
                 counts = int(counts)
 
                 # Initialise table
-                if not tablename in self.data:
+                if tablename not in self.data:
                     self.data[tablename] = {
                         'sections': [],
                         'count': counts,
